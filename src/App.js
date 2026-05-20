@@ -4,6 +4,12 @@ import { db } from "./firebase";
 import { ref, onValue, set, off } from "firebase/database";
 
 // shared=true: visible to all users of this artifact
+const fbSave = (key, val) => { try { set(ref(db, key), val); } catch(_){} };
+const fbListen = (key, cb) => {
+  const r = ref(db, key);
+  onValue(r, snap => cb(snap.exists() ? snap.val() : null));
+  return () => off(r);
+};
 const save = async (key, val, shared=false) => {
   if(shared) { fbSave(key, val); return; }
   try { localStorage.setItem(key, JSON.stringify(val)); } catch(_){}

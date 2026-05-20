@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { db } from "./firebase";
 import { ref, onValue, set, off } from "firebase/database";
 
-
 // shared=true: visible to all users of this artifact
 const fbSave = (key, val) => { try { set(ref(db, key), val); } catch(_){} };
 const fbListen = (key, cb) => {
@@ -93,48 +92,34 @@ export default function App() {
   const saveEvents = (data) => { setEvents(data); const userEvs=data.filter(e=>!e.isSchedule); const obj={}; userEvs.forEach(e=>{obj[e.id]=e;}); fbSave("re_events",obj); };
 
   useEffect(()=>{
-    // Restore session
-    try {
-      const s = localStorage.getItem("re_session");
-      if(s) { const u=JSON.parse(s); if(u&&u.user) setCurrentUser(u.user); }
-    } catch(_){}
-
-    // Firebase listeners for shared data
-    const u1 = fbListen("re_accounts", data => { if(data) setAccounts(data); });
-    const u2 = fbListen("re_props3", data => {
-      setProperties(data ? (Array.isArray(data)?data:Object.values(data)) : SEED_PROPS);
+    try { const s=localStorage.getItem("re_session"); if(s){const u=JSON.parse(s);if(u&&u.user)setCurrentUser(u.user);} } catch(_){}
+    const u1=fbListen("re_accounts", data=>{if(data)setAccounts(data);});
+    const u2=fbListen("re_props3", data=>{setProperties(data?(Array.isArray(data)?data:Object.values(data)):SEED_PROPS);});
+    const u3=fbListen("re_buyers", data=>{setBuyers(data?(Array.isArray(data)?data:Object.values(data)):[]);});
+    const u4=fbListen("re_showings3", data=>{setShowings(data?(Array.isArray(data)?data:Object.values(data)):[]);});
+    const u5=fbListen("re_events", data=>{
+      const userEvs=data?(Array.isArray(data)?data:Object.values(data)).filter(e=>!e.isSchedule):[];
+      setEvents([...MAY_SCHEDULE,...userEvs]);
     });
-    const u3 = fbListen("re_buyers", data => {
-      setBuyers(data ? (Array.isArray(data)?data:Object.values(data)) : []);
-    });
-    const u4 = fbListen("re_showings3", data => {
-      setShowings(data ? (Array.isArray(data)?data:Object.values(data)) : []);
-    });
-    const u5 = fbListen("re_events", data => {
-      const userEvs = data ? (Array.isArray(data)?data:Object.values(data)).filter(e=>!e.isSchedule) : [];
-      setEvents([...MAY_SCHEDULE, ...userEvs]);
-    });
-
     setReady(true);
-    return () => { u1(); u2(); u3(); u4(); u5(); };
+    return ()=>{u1();u2();u3();u4();u5();};
   },[]);
 
   useEffect(()=>{ if(currentUser) try{const v=localStorage.getItem("re_myclients_"+currentUser);if(v)setMyClients(JSON.parse(v));}catch(_){} },[currentUser]);
-
   useEffect(()=>{ if(currentUser&&ready){try{localStorage.setItem("re_myclients_"+currentUser,JSON.stringify(myClients));}catch(_){}} },[myClients,currentUser,ready]);
 
   const doLogin = ()=>{
     const name=loginName.trim(); const pass=loginPass.trim();
-    if(!name||!pass){ setLoginError("請輸入姓名和密碼"); return; }
+    if(!name||!pass){setLoginError("請輸入姓名和密碼");return;}
     if(loginMode==="register"){
-      if(loginInvite.trim()!=="3288283"){ setLoginError("邀請碼錯誤"); return; }
-      if(accounts[name]){ setLoginError("此姓名已被註冊，請直接登入"); return; }
+      if(loginInvite.trim()!=="3288283"){setLoginError("邀請碼錯誤");return;}
+      if(accounts[name]){setLoginError("此姓名已被註冊，請直接登入");return;}
       fbSave("re_accounts",{...accounts,[name]:pass});
       localStorage.setItem("re_session",JSON.stringify({user:name,pass}));
       setCurrentUser(name);
     } else {
-      if(!accounts[name]){ setLoginError("帳號不存在，請先選「首次註冊」"); return; }
-      if(accounts[name]!==pass){ setLoginError("密碼錯誤"); return; }
+      if(!accounts[name]){setLoginError("帳號不存在，請先選「首次註冊」");return;}
+      if(accounts[name]!==pass){setLoginError("密碼錯誤");return;}
       localStorage.setItem("re_session",JSON.stringify({user:name,pass}));
       setCurrentUser(name);
     }
@@ -170,16 +155,13 @@ export default function App() {
               </button>
             ))}
           </div>
-          <div className="field-wrap">
-            <label className="field-label">姓名</label>
+          <div className="field-wrap"><label className="field-label">姓名</label>
             <input placeholder="例：采萱" value={loginName} onChange={e=>{setLoginName(e.target.value);setLoginError("");}}/>
           </div>
-          <div className="field-wrap">
-            <label className="field-label">密碼</label>
+          <div className="field-wrap"><label className="field-label">密碼</label>
             <input type="password" placeholder="輸入密碼" value={loginPass} onChange={e=>{setLoginPass(e.target.value);setLoginError("");}} onKeyDown={e=>{if(e.key==="Enter")doLogin();}}/>
           </div>
-          {loginMode==="register"&&(<div className="field-wrap">
-            <label className="field-label">店內邀請碼</label>
+          {loginMode==="register"&&(<div className="field-wrap"><label className="field-label">店內邀請碼</label>
             <input placeholder="請輸入邀請碼" value={loginInvite} onChange={e=>{setLoginInvite(e.target.value);setLoginError("");}}/>
           </div>)}
           {loginError&&<div style={{background:"#fff3f3",border:"1px solid #ffcdd2",borderRadius:10,padding:"10px 14px",color:"#ff3b30",fontSize:13,marginBottom:12}}>❌ {loginError}</div>}
@@ -361,7 +343,7 @@ function Buyers({ buyers, setBuyers, myClients, setMyClients, properties, showin
     }
     // Save phone/line privately, strip from shared record
     if(form.phone || form.line) {
-      try{localStorage.setItem("re_contact_"+form.id,JSON.stringify({phone:form.phone||"",line:form.line||""}));}catch(_){}
+      save("re_contact_"+form.id, {phone:form.phone||"", line:form.line||""});
     }
     const sharedForm = {...form, phone:"", line:"", timeline: tl};
     const finalForm = {...form, timeline: tl};
@@ -552,7 +534,7 @@ function BuyerDetail({ b, mc, bShowings, properties, events, setEvents, onEdit, 
   const [showAddShowing, setShowAddShowing] = useState(false);
   const [privateContact, setPrivateContact] = useState({phone:"",line:""});
   useEffect(()=>{
-    try{const v=localStorage.getItem("re_contact_"+b.id);if(v)setPrivateContact(JSON.parse(v));else setPrivateContact({phone:"",line:""});}catch(_){setPrivateContact({phone:"",line:""});}
+    load("re_contact_"+b.id).then(c=>{ if(c) setPrivateContact(c); else setPrivateContact({phone:"",line:""}); });
   },[b.id]);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [selPropId, setSelPropId] = useState("");
@@ -1637,9 +1619,10 @@ function Properties({ properties, setProperties, showings, buyers }) {
   const [pasteText, setPasteText] = useState("");
   const [importMsg, setImportMsg] = useState("");
   const [importStats, setImportStats] = useState(null);
+  const [filterCategory, setFilterCategory] = useState("全部");
   const upd=(k,v)=>setForm(p=>({...p,[k]:v}));
   const openDetail=p=>{ setSelected(p); setView("detail"); };
-  const openNew=()=>{ setForm({id:uid(),name:"",price:"",area:"",rooms:"",district:"",floor:"",type:"",layout:"",features:"",notes:"",_fromSheet:false}); setSelected(null); setView("form"); };
+  const openNew=(cat="售屋")=>{ setForm({id:uid(),name:"",propCategory:cat,price:"",area:"",rooms:"",district:"",floor:"",type:"",layout:"",parking:"",features:"",notes:"",_fromSheet:false}); setSelected(null); setView("form"); };
   const openEdit=p=>{ setForm({...p}); setSelected(p); setView("form"); };
   const doSave=()=>{
     const rec={...form,price:Number(form.price),area:Number(form.area),rooms:Number(form.rooms)};
@@ -1668,77 +1651,130 @@ function Properties({ properties, setProperties, showings, buyers }) {
         <button className="back-btn" onClick={()=>setView("list")}>← 返回</button>
         <div className="page-title" style={{marginBottom:0}}>{selected?"編輯物件":"新增物件"}</div>
       </div>
-      <div className="field-wrap"><label className="field-label">物件名稱 *</label><input value={form.name||""} onChange={e=>upd("name",e.target.value)}/></div>
-      <div className="field-wrap"><label className="field-label">售價（萬）*</label><input type="number" value={form.price||""} onChange={e=>upd("price",e.target.value)}/></div>
-      <div className="two-col">
-        <div className="field-wrap"><label className="field-label">主建物（坪）</label><input type="number" placeholder="0.00" value={form.areaMain||""} onChange={e=>upd("areaMain",e.target.value)}/></div>
-        <div className="field-wrap"><label className="field-label">附屬建物（坪）</label><input type="number" placeholder="0.00" value={form.areaSub||""} onChange={e=>upd("areaSub",e.target.value)}/></div>
-      </div>
-      <div className="two-col">
-        <div className="field-wrap"><label className="field-label">公設（坪）</label><input type="number" placeholder="0.00" value={form.areaCommon||""} onChange={e=>upd("areaCommon",e.target.value)}/></div>
-        <div className="field-wrap"><label className="field-label">車位（坪）</label><input type="number" placeholder="0.00" value={form.areaParking||""} onChange={e=>upd("areaParking",e.target.value)}/></div>
-      </div>
-      <div className="two-col">
-        <div className="field-wrap"><label className="field-label">房數</label>
-          <select value={form.rooms||""} onChange={e=>upd("rooms",e.target.value)}>
-            <option value="">選擇</option>
-            {["1","2","3","4","5"].map(v=><option key={v} value={v}>{v}房</option>)}
-          </select>
+
+      {/* 物件類型選擇 */}
+      <div className="field-wrap">
+        <label className="field-label">物件類型 *</label>
+        <div style={{display:"flex",gap:8}}>
+          {["售屋","出租","口約"].map(t=>(
+            <button key={t} onClick={()=>upd("propCategory",t)} style={{flex:1,padding:"10px",background:form.propCategory===t?"#e8722a":"#f5f0eb",border:"1px solid",borderColor:form.propCategory===t?"#e8722a":"#e0d6ca",borderRadius:10,color:form.propCategory===t?"#fff":"#666666",fontFamily:"Noto Sans TC,sans-serif",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+              {t==="售屋"?"🏠 售屋":t==="出租"?"🔑 出租":"🤝 口約"}
+            </button>
+          ))}
         </div>
-        <div className="field-wrap"><label className="field-label">行政區</label><input value={form.district||""} onChange={e=>upd("district",e.target.value)}/></div>
       </div>
+
+      {/* 共用欄位 */}
+      <div className="field-wrap"><label className="field-label">物件名稱（社區）*</label><input value={form.name||""} onChange={e=>upd("name",e.target.value)}/></div>
       <div className="two-col">
-        <div className="field-wrap"><label className="field-label">樓層</label>
-          <input placeholder="例：3/15、頂樓、5F" value={form.floor||""} onChange={e=>upd("floor",e.target.value)}/>
-        </div>
-        <div className="field-wrap"><label className="field-label">類型</label>
+        <div className="field-wrap"><label className="field-label">區域</label><input placeholder="A7、信義區…" value={form.district||""} onChange={e=>upd("district",e.target.value)}/></div>
+        <div className="field-wrap"><label className="field-label">型態</label>
           <select value={form.type||""} onChange={e=>upd("type",e.target.value)}>
             <option value="">選擇</option>
-            {["電梯大樓","公寓","透天厝","套房","店面","土地"].map(v=><option key={v}>{v}</option>)}
+            {["電梯大樓","公寓","透天厝","套房","店面","土地","廠房"].map(v=><option key={v}>{v}</option>)}
           </select>
         </div>
       </div>
-      <div className="field-wrap"><label className="field-label">特色</label><input placeholder="近捷運,有車位" value={form.features||""} onChange={e=>upd("features",e.target.value)}/></div>
+      <div className="two-col">
+        <div className="field-wrap"><label className="field-label">格局（房/廳/衛/陽）</label><input placeholder="2/2/1/1" value={form.layout||""} onChange={e=>upd("layout",e.target.value)}/></div>
+        <div className="field-wrap"><label className="field-label">車位</label>
+          <select value={form.parking||""} onChange={e=>upd("parking",e.target.value)}>
+            <option value="">無</option>
+            <option value="有">有</option>
+            <option value="平面">平面</option>
+            <option value="機械">機械</option>
+            <option value="坡道">坡道</option>
+          </select>
+        </div>
+      </div>
+      <div className="field-wrap"><label className="field-label">樓層</label><input placeholder="例：3/15、頂樓、5F" value={form.floor||""} onChange={e=>upd("floor",e.target.value)}/></div>
+
+      {/* 售屋欄位 */}
+      {(!form.propCategory||form.propCategory==="售屋") && <>
+        <div className="section-hd">售屋資訊</div>
+        <div className="field-wrap"><label className="field-label">開價（萬）*</label><input type="number" value={form.price||""} onChange={e=>upd("price",e.target.value)}/></div>
+        <div className="two-col">
+          <div className="field-wrap"><label className="field-label">主建物（坪）</label><input type="number" placeholder="0.00" value={form.areaMain||""} onChange={e=>upd("areaMain",e.target.value)}/></div>
+          <div className="field-wrap"><label className="field-label">附屬建物（坪）</label><input type="number" placeholder="0.00" value={form.areaSub||""} onChange={e=>upd("areaSub",e.target.value)}/></div>
+        </div>
+        <div className="two-col">
+          <div className="field-wrap"><label className="field-label">公設（坪）</label><input type="number" placeholder="0.00" value={form.areaCommon||""} onChange={e=>upd("areaCommon",e.target.value)}/></div>
+          <div className="field-wrap"><label className="field-label">車位（坪）</label><input type="number" placeholder="0.00" value={form.areaParking||""} onChange={e=>upd("areaParking",e.target.value)}/></div>
+        </div>
+        <div className="two-col">
+          <div className="field-wrap"><label className="field-label">帶看方式</label><input placeholder="自由帶看、配合帶…" value={form.showingType||""} onChange={e=>upd("showingType",e.target.value)}/></div>
+          <div className="field-wrap"><label className="field-label">開發業務</label><input placeholder="采萱" value={form.agent2||""} onChange={e=>upd("agent2",e.target.value)}/></div>
+        </div>
+      </>}
+
+      {/* 出租欄位 */}
+      {form.propCategory==="出租" && <>
+        <div className="section-hd">出租資訊</div>
+        <div className="two-col">
+          <div className="field-wrap"><label className="field-label">租金（元/月）</label><input type="number" placeholder="25000" value={form.rent||""} onChange={e=>upd("rent",e.target.value)}/></div>
+          <div className="field-wrap"><label className="field-label">服務費（元）</label><input type="number" placeholder="3000" value={form.serviceFee||""} onChange={e=>upd("serviceFee",e.target.value)}/></div>
+        </div>
+        <div className="field-wrap"><label className="field-label">地址</label><input placeholder="完整地址" value={form.address||""} onChange={e=>upd("address",e.target.value)}/></div>
+        <div className="two-col">
+          <div className="field-wrap"><label className="field-label">帶看方式</label><input placeholder="自由帶看、配合帶…" value={form.showingType||""} onChange={e=>upd("showingType",e.target.value)}/></div>
+          <div className="field-wrap"><label className="field-label">開發業務</label><input placeholder="采萱" value={form.agent2||""} onChange={e=>upd("agent2",e.target.value)}/></div>
+        </div>
+      </>}
+
+      {/* 口約欄位 */}
+      {form.propCategory==="口約" && <>
+        <div className="section-hd">口約資訊</div>
+        <div className="two-col">
+          <div className="field-wrap"><label className="field-label">開價（萬）</label><input type="number" value={form.price||""} onChange={e=>upd("price",e.target.value)}/></div>
+          <div className="field-wrap"><label className="field-label">權狀坪數</label><input type="number" placeholder="0.00" value={form.area||""} onChange={e=>upd("area",e.target.value)}/></div>
+        </div>
+        <div className="two-col">
+          <div className="field-wrap"><label className="field-label">扣車坪數</label><input type="number" placeholder="0.00" value={form.netArea||""} onChange={e=>upd("netArea",e.target.value)}/></div>
+          <div className="field-wrap"><label className="field-label">單價/坪（扣車）</label><input type="number" placeholder="0.00" value={form.unitPrice||""} onChange={e=>upd("unitPrice",e.target.value)}/></div>
+        </div>
+        <div className="two-col">
+          <div className="field-wrap"><label className="field-label">帶看方式</label><input placeholder="自由帶看、配合帶…" value={form.showingType||""} onChange={e=>upd("showingType",e.target.value)}/></div>
+          <div className="field-wrap"><label className="field-label">開發業務</label><input placeholder="采萱" value={form.agent2||""} onChange={e=>upd("agent2",e.target.value)}/></div>
+        </div>
+      </>}
+
+      {/* 共用下方欄位 */}
+      <div className="field-wrap"><label className="field-label">特殊事項</label><input placeholder="近捷運、有管理員…" value={form.features||""} onChange={e=>upd("features",e.target.value)}/></div>
       <div className="field-wrap"><label className="field-label">物件連結</label><input placeholder="https://..." value={form.url||""} onChange={e=>upd("url",e.target.value)}/></div>
       <div className="field-wrap">
         <label className="field-label">上傳物調資料（PDF / 圖片）</label>
         <label style={{display:"flex",alignItems:"center",gap:10,background:"#fff8f3",border:"2px dashed #e8722a",borderRadius:12,padding:"14px 16px",cursor:"pointer",color:"#e8722a",fontSize:14,fontWeight:600}}>
           📎 點擊選擇檔案（PDF / PNG / JPG）
           <input type="file" accept="application/pdf,image/*" multiple onChange={e=>{
-            const files = Array.from(e.target.files);
+            const files=Array.from(e.target.files);
             files.forEach(file=>{
-              const reader = new FileReader();
-              reader.onload = ev=>{
-                const isPdf = file.type==="application/pdf";
-                upd("docs",[...(form.docs||[]),{id:uid(),name:file.name,data:ev.target.result,isPdf,size:file.size}]);
-              };
+              const reader=new FileReader();
+              reader.onload=ev=>{ const isPdf=file.type==="application/pdf"; upd("docs",[...(form.docs||[]),{id:uid(),name:file.name,data:ev.target.result,isPdf}]); };
               reader.readAsDataURL(file);
             });
           }} style={{display:"none"}}/>
         </label>
-        {(form.docs||[]).length>0 && (
-          <div style={{display:"flex",flexDirection:"column",gap:10,marginTop:10}}>
+        {(form.docs||[]).length>0&&(
+          <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>
             {(form.docs||[]).map((doc,i)=>(
               <div key={doc.id||i} style={{background:"#f5f0eb",border:"1px solid #e0d6ca",borderRadius:12,overflow:"hidden"}}>
-                {!doc.isPdf && (
-                  <img src={doc.data} alt={doc.name} style={{width:"100%",maxHeight:200,objectFit:"contain",background:"#ffffff",display:"block"}}/>
-                )}
+                {!doc.isPdf&&<img src={doc.data} alt={doc.name} style={{width:"100%",maxHeight:200,objectFit:"contain",background:"#ffffff",display:"block"}}/>}
                 <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px"}}>
                   <span style={{fontSize:16}}>{doc.isPdf?"📄":"🖼️"}</span>
                   <span style={{flex:1,fontSize:12,color:"#444444",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{doc.name}</span>
-                  <button onClick={()=>upd("docs",(form.docs||[]).filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:"#ff3b30",cursor:"pointer",fontSize:18,lineHeight:1}}>✕</button>
+                  <button onClick={()=>upd("docs",(form.docs||[]).filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:"#ff3b30",cursor:"pointer",fontSize:18}}>✕</button>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
-
       <div className="field-wrap"><label className="field-label">備註</label><textarea rows={2} value={form.notes||""} onChange={e=>upd("notes",e.target.value)}/></div>
-      <button className="btn-gold" onClick={doSave} disabled={!form.name||!form.price}>💾 儲存</button>
-      {selected && <button className="btn-danger" style={{marginTop:10}} onClick={()=>doDel(selected.id)}>🗑 刪除</button>}
+      <button className="btn-gold" onClick={doSave} disabled={!form.name}>💾 儲存</button>
+      {selected&&<button className="btn-danger" style={{marginTop:10}} onClick={()=>doDel(selected.id)}>🗑 刪除</button>}
     </div>
   );
+
 
   if(view==="detail") {
     const p = selected;
@@ -1797,6 +1833,42 @@ function Properties({ properties, setProperties, showings, buyers }) {
           </div>
           <div style={{fontSize:13,color:"#888888"}}>{[p.district,p.layout||(p.rooms?(p.rooms+"房"):""),p.type,p.floor].filter(Boolean).join(" · ")}</div>
         </div>
+
+        {/* Category badge */}
+        {p.propCategory&&p.propCategory!=="售屋"&&(
+          <div style={{display:"inline-flex",alignItems:"center",gap:6,background:p.propCategory==="出租"?"#eff6ff":"#f5f3ff",border:"1px solid",borderColor:p.propCategory==="出租"?"#bfdbfe":"#ddd6fe",borderRadius:20,padding:"4px 12px",marginBottom:12,fontSize:13,fontWeight:700,color:p.propCategory==="出租"?"#3b82f6":"#8b5cf6"}}>
+            {p.propCategory==="出租"?"🔑 出租物件":"🤝 口約物件"}
+          </div>
+        )}
+
+        {/* Rental specific */}
+        {p.propCategory==="出租"&&(
+          <div className="info-box" style={{marginBottom:12}}>
+            <div className="info-box-label">出租資訊</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginTop:6}}>
+              {p.rent&&<div style={{fontSize:14,fontWeight:700,color:"#e8722a"}}>{Number(p.rent).toLocaleString()} 元/月</div>}
+              {p.serviceFee&&<div style={{fontSize:13}}>服務費：{Number(p.serviceFee).toLocaleString()} 元</div>}
+              {p.address&&<div style={{fontSize:13,gridColumn:"1/-1"}}>📍 {p.address}</div>}
+              {p.showingType&&<div style={{fontSize:13}}>帶看：{p.showingType}</div>}
+              {p.agent2&&<div style={{fontSize:13}}>開發：{p.agent2}</div>}
+            </div>
+          </div>
+        )}
+
+        {/* Verbal specific */}
+        {p.propCategory==="口約"&&(
+          <div className="info-box" style={{marginBottom:12}}>
+            <div className="info-box-label">口約資訊</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginTop:6}}>
+              {p.price&&<div style={{fontSize:14,fontWeight:700,color:"#e8722a"}}>{p.price} 萬</div>}
+              {p.area&&<div style={{fontSize:13}}>權狀：{p.area} 坪</div>}
+              {p.netArea&&<div style={{fontSize:13}}>扣車：{p.netArea} 坪</div>}
+              {p.unitPrice&&<div style={{fontSize:13}}>單價：{p.unitPrice} 萬/坪</div>}
+              {p.showingType&&<div style={{fontSize:13}}>帶看：{p.showingType}</div>}
+              {p.agent2&&<div style={{fontSize:13}}>開發：{p.agent2}</div>}
+            </div>
+          </div>
+        )}
 
         {/* Area breakdown */}
         {(p.areaMain||p.areaSub||p.areaCommon||p.areaParking) && (
@@ -1923,12 +1995,50 @@ function Properties({ properties, setProperties, showings, buyers }) {
     );
   }
 
+  const CATS = ["全部","售屋","出租","口約"];
+  const CAT_COLORS = {"售屋":"#e8722a","出租":"#3b82f6","口約":"#8b5cf6"};
+  const filteredProps = filterCategory==="全部" ? properties : properties.filter(p=>(p.propCategory||"售屋")===filterCategory);
+
   return (
     <div className="page">
       <div className="page-nav">
-        <div className="page-title" style={{marginBottom:0}}>物件庫（{properties.length}）</div>
-        <button className="add-btn" onClick={openNew}>＋ 新增</button>
+        <div className="page-title" style={{marginBottom:0}}>物件庫（{filteredProps.length}）</div>
+        <button className="add-btn" onClick={()=>openNew(filterCategory==="全部"?"售屋":filterCategory)}>＋ 新增</button>
       </div>
+
+      {/* Category filter tabs */}
+      <div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto",paddingBottom:2}}>
+        {CATS.map(cat=>{
+          const count = cat==="全部" ? properties.length : properties.filter(p=>(p.propCategory||"售屋")===cat).length;
+          const isActive = filterCategory===cat;
+          const color = CAT_COLORS[cat]||"#e8722a";
+          return (
+            <button key={cat} onClick={()=>setFilterCategory(cat)} style={{
+              flexShrink:0, padding:"8px 14px", borderRadius:20,
+              background: isActive ? color : "#f5f0eb",
+              border: "1px solid", borderColor: isActive ? color : "#e0d6ca",
+              color: isActive ? "#fff" : "#666666",
+              fontFamily:"Noto Sans TC,sans-serif", fontSize:13, fontWeight:700, cursor:"pointer"
+            }}>
+              {cat==="售屋"?"🏠":cat==="出租"?"🔑":cat==="口約"?"🤝":"📋"} {cat} {count>0?`(${count})`:""}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Quick add buttons when filtered */}
+      {filterCategory!=="全部" && (
+        <button onClick={()=>openNew(filterCategory)} style={{
+          width:"100%", padding:"12px", marginBottom:12,
+          background:"#fff8f3", border:"2px dashed",
+          borderColor: CAT_COLORS[filterCategory]||"#e8722a",
+          borderRadius:12, color: CAT_COLORS[filterCategory]||"#e8722a",
+          fontFamily:"Noto Sans TC,sans-serif", fontSize:14, fontWeight:700, cursor:"pointer"
+        }}>
+          ＋ 新增{filterCategory==="售屋"?"🏠":filterCategory==="出租"?"🔑":"🤝"}{filterCategory}物件
+        </button>
+      )}
+
       <div className="import-panel">
         <button className="import-toggle" onClick={()=>{setShowImport(v=>!v);setImportMsg("");setImportStats(null);}}>
           <span>📊 從 Google Sheets 匯入</span>
@@ -1954,11 +2064,29 @@ function Properties({ properties, setProperties, showings, buyers }) {
         <div className="list-card" key={p.id} onClick={()=>openDetail(p)} style={{flexDirection:"column",gap:0,alignItems:"stretch"}}>
           <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
             <div className="list-card-main" style={{flex:1}}>
-              <div className="list-card-title">{p._fromSheet&&<span className="sheet-dot">●</span>}{p.name}</div>
-              <div className="list-card-sub">{[p.district,p.area?(p.area+"坪"):"",p.layout||(p.rooms?(p.rooms+"房"):""),p.type].filter(Boolean).join(" · ")}</div>
+              <div className="list-card-title">
+                {p._fromSheet&&<span className="sheet-dot">●</span>}
+                {p.propCategory&&p.propCategory!=="售屋"&&(
+                  <span style={{background:p.propCategory==="出租"?"#3b82f6":"#8b5cf6",color:"#fff",borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:700,marginRight:6}}>{p.propCategory==="出租"?"🔑 出租":"🤝 口約"}</span>
+                )}
+                {p.name}
+              </div>
+              <div className="list-card-sub">
+                {[p.district,
+                  p.areaMain?(((Number(p.areaMain)||0)+(Number(p.areaSub)||0)+(Number(p.areaCommon)||0)+(Number(p.areaParking)||0)).toFixed(1)+"坪"):p.area?(p.area+"坪"):"",
+                  p.layout||(p.rooms?(p.rooms+"房"):""),
+                  p.type,
+                  p.floor
+                ].filter(Boolean).join(" · ")}
+              </div>
               {p.notes&&<div className="list-card-note">{p.notes.slice(0,35)}{p.notes.length>35?"…":""}</div>}
             </div>
-            <div className="price-tag" style={{flexShrink:0}}>{p.price?(p.price+"萬"):""}</div>
+            <div style={{textAlign:"right",flexShrink:0}}>
+              {p.propCategory==="出租"
+                ? <div className="price-tag">{p.rent?(Number(p.rent).toLocaleString()+"元/月"):""}</div>
+                : <div className="price-tag">{p.price?(p.price+"萬"):""}</div>
+              }
+            </div>
           </div>
           {(()=>{
             const n=s=>(s||"").trim();

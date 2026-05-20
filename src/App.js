@@ -1,21 +1,14 @@
 import { useState, useEffect } from "react";
-import { db } from "./firebase";
-import { ref, onValue, set, off } from "firebase/database";
+import * as XLSX from "xlsx";
 
 // shared=true: visible to all users of this artifact
-const fbSave = (key, val) => { try { set(ref(db, key), val); } catch(_){} };
-const fbListen = (key, cb) => {
-  const r = ref(db, key);
-  onValue(r, snap => cb(snap.exists() ? snap.val() : null));
-  return () => off(r);
-};
 const save = async (key, val, shared=false) => {
-  if(shared) { fbSave(key, val); return; }
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch(_){}
+  try { await window.storage.set(key, JSON.stringify(val), shared); } catch(_){}
+  try { localStorage.setItem(key+(shared?"_s":""), JSON.stringify(val)); } catch(_){}
 };
 const load = async (key, fb, shared=false) => {
-  if(shared) return fb;
-  try { const v = localStorage.getItem(key); if(v) return JSON.parse(v); } catch(_){}
+  try { const r = await window.storage.get(key, shared); if(r) return JSON.parse(r.value); } catch(_){}
+  try { const v = localStorage.getItem(key+(shared?"_s":"")); if(v) return JSON.parse(v); } catch(_){}
   return fb;
 };
 const uid = () => Math.random().toString(36).slice(2,8); // v2.1
@@ -42,44 +35,39 @@ function parseSheetText(text) {
 }
 
 function rowToProperty(row, forceCategory="") {
-  // Name detection - skip URL-like values
-  const rawName = row["社區(物件)"]||row["社區"]||row["物件名稱"]||"";
+  const str = v => { try { return (v===null||v===undefined||v instanceof Date)?"":String(v).trim(); } catch(_){return "";} };
+  const rawName = str(row["社區(物件)"]||row["社區"]||row["物件名稱"]||"");
   const isUrl = rawName.startsWith("http")||rawName.startsWith("www");
-  // For rentals: use address or district+type as name if no proper name
-  const district2 = row["區域"]||row["行政區"]||"";
-  const type2 = row["型態"]||row["類型"]||"";
-  const address2 = row["地址"]||"";
-  const autoName = address2 ? address2.slice(0,15) : (district2&&type2 ? district2+"·"+type2 : "");
-  const name = isUrl ? autoName : (rawName || autoName);
-  // URL: from 網址 column, or from 社區(物件) if it's a URL
-  const url = row["網址"]||row["連結"]||row["url"]||(isUrl?rawName:"");
-  const district = row["區域"]||row["行政區"]||"";
-  const layout = row["格局(房/廳/衛/陽)"]||row["格局"]||"";
-  const rooms = parseInt(layout.split("/")[0])||0;
-  const floor = row["樓層"]||"";
-  const type = row["型態"]||row["類型"]||"";
-  const parking = (row["車位"]==="TRUE"||row["車位"]==="有")?"有車位":"";
+  const district = str(row["區域"]||row["行政區"]||"");
+  const type = str(row["型態"]||row["類型"]||"");
+  const address = str(row["地址"]||"");
+  const autoName = address?address.slice(0,15):(district&&type?district+"·"+type:"");
+  const name = isUrl?autoName:(rawName||autoName);
+  const url = str(row["網址"]||row["連結"]||row["url"]||(isUrl?rawName:""));
+  const rawLayout = row["格局(房/廳/衛/陽)"]||row["格局"]||"";
+  const layout = (rawLayout===null||rawLayout===undefined||rawLayout instanceof Date)?"":String(rawLayout).trim();
+  const rooms = parseInt((layout||"0").split("/")[0])||0;
+  const rawFloor = row["樓層"];
+  const floor = (rawFloor===null||rawFloor===undefined||rawFloor instanceof Date)?"":String(rawFloor).trim();
+  const rawParking = row["車位"];
+  const parking = (rawParking===true||rawParking==="TRUE"||rawParking==="有")?"有":"無";
   const hasRent = !!(row["租金"]||row["月租"]);
-  const propCategory = forceCategory || (hasRent ? "出租" : "售屋");
-  const price = parseFloat(row["開價"]||row["售價"]||"0")||0;
-  const area = parseFloat(row["權狀坪數"]||row["坪數"]||"0")||0;
-  const rent = row["租金"]||row["月租"]||"";
-  const serviceFee = row["服務費"]||"";
-  const address = row["地址"]||"";
-  const netArea = row["扣車坪數"]||"";
-  const unitPrice = row["單價/坪(扣車)"]||row["單價/坪"]||"";
-  const showingType = row["帶看方式"]||"";
-  const agent2 = row["開發"]||"";
-  const special = row["特殊事項"]||"";
-  const mandate = row["委託狀態"]||"";
-  const mandateEnd = row["委託到期日"]||"";
+  const propCategory = forceCategory||(hasRent?"出租":"售屋");
+  const price = parseFloat(str(row["開價"]||row["售價"]||"0"))||0;
+  const area = parseFloat(str(row["權狀坪數"]||row["坪數"]||"0"))||0;
+  const rawRent = str(row["租金"]||row["月租"]||"");
+  const rent = rawRent.includes("/")?rawRent.split("/")[0]:rawRent;
+  const serviceFee = str(row["服務費"]||"");
+  const netArea = str(row["扣車坪數"]||"");
+  const unitPrice = str(row["單價/坪(扣車)"]||row["單價/坪"]||"");
+  const showingType = str(row["帶看方式"]||"");
+  const agent2 = str(row["開發"]||"");
+  const special = str(row["特殊事項"]||"");
   const noteParts = [];
   if(agent2) noteParts.push("開發:"+agent2);
   if(netArea) noteParts.push("扣車坪:"+netArea);
   if(unitPrice) noteParts.push("單價:"+unitPrice+"萬/坪");
-  if(mandate) noteParts.push(mandate);
-  if(mandateEnd) noteParts.push("到期:"+mandateEnd);
-  return { id:uid(), name:name||"未命名", propCategory, price, area, rooms, district, floor, type, layout, parking, url, features:special, notes:noteParts.join(" · "), rent, serviceFee, address, netArea, unitPrice, agent2, showingType, _fromSheet:true };
+  return {id:uid(),name:name||"未命名",propCategory,price,area,rooms,district,floor,type,layout,parking,url,features:special,notes:noteParts.join(" · "),rent,serviceFee,address,netArea,unitPrice,agent2,showingType,_fromSheet:true};
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
@@ -2038,6 +2026,7 @@ function Properties({ properties, setProperties, showings, buyers }) {
   const [filterRooms, setFilterRooms] = useState("");
   const [filterFloor, setFilterFloor] = useState("");
   const [showFilter, setShowFilter] = useState(false);
+  const [sortBy, setSortBy] = useState("default"); // default | price_asc | price_desc | rent_asc | rent_desc
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
 
@@ -2058,6 +2047,12 @@ function Properties({ properties, setProperties, showings, buyers }) {
     return true;
   });
   const hasFilter = filterPrice.min||filterPrice.max||filterRooms||filterFloor;
+
+  // Sort
+  if(sortBy==="price_asc") filteredProps.sort((a,b)=>(a.price||0)-(b.price||0));
+  else if(sortBy==="price_desc") filteredProps.sort((a,b)=>(b.price||0)-(a.price||0));
+  else if(sortBy==="rent_asc") filteredProps.sort((a,b)=>parseInt(a.rent||0)-parseInt(b.rent||0));
+  else if(sortBy==="rent_desc") filteredProps.sort((a,b)=>parseInt(b.rent||0)-parseInt(a.rent||0));
 
   return (
     <div className="page">
@@ -2098,7 +2093,7 @@ function Properties({ properties, setProperties, showings, buyers }) {
           const isActive = filterCategory===cat;
           const color = CAT_COLORS[cat]||"#e8722a";
           return (
-            <button key={cat} onClick={()=>{setFilterCategory(cat);setSelectMode(false);setSelectedIds([]);}} style={{
+            <button key={cat} onClick={()=>{setFilterCategory(cat);setSelectMode(false);setSelectedIds([]);setSortBy("default");}} style={{
               flexShrink:0, padding:"8px 14px", borderRadius:20,
               background: isActive ? color : "#f5f0eb",
               border: "1px solid", borderColor: isActive ? color : "#e0d6ca",
@@ -2142,10 +2137,23 @@ function Properties({ properties, setProperties, showings, buyers }) {
                   <input placeholder="例：3、頂樓、1F" value={filterFloor} onChange={e=>setFilterFloor(e.target.value)} style={{fontSize:13}}/>
                 </div>
               </div>
-              <button onClick={()=>{setFilterPrice({min:"",max:""});setFilterRooms("");setFilterFloor("");}} style={{background:"none",border:"1px solid #e0d6ca",borderRadius:8,padding:"6px 12px",color:"#888888",fontSize:12,cursor:"pointer",fontFamily:"Noto Sans TC,sans-serif"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+                <label className="field-label" style={{margin:0,whiteSpace:"nowrap"}}>排序</label>
+                <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{flex:1,padding:"6px 10px",fontSize:12,borderRadius:8,border:"1px solid #e0d6ca",background:"#ffffff",color:"#1a1a1a",fontFamily:"Noto Sans TC,sans-serif"}}>
+                  <option value="default">預設順序</option>
+                  {(filterCategory==="出租") ? <>
+                    <option value="rent_asc">租金 低→高</option>
+                    <option value="rent_desc">租金 高→低</option>
+                  </> : <>
+                    <option value="price_asc">總價 低→高</option>
+                    <option value="price_desc">總價 高→低</option>
+                  </>}
+                </select>
+              </div>
+              <button onClick={()=>{setFilterPrice({min:"",max:""});setFilterRooms("");setFilterFloor("");setSortBy("default");}} style={{background:"none",border:"1px solid #e0d6ca",borderRadius:8,padding:"6px 12px",color:"#888888",fontSize:12,cursor:"pointer",fontFamily:"Noto Sans TC,sans-serif"}}>
                 ✕ 清除篩選
               </button>
-              <div style={{fontSize:11,color:"#e8722a",marginTop:6}}>找到 {filteredProps.length} 筆</div>
+              <div style={{fontSize:11,color:"#e8722a",marginTop:6}}>找到 {filteredProps.length} 筆{sortBy!=="default"?" · 已排序":""}</div>
             </div>
           )}
         </div>
@@ -2171,6 +2179,73 @@ function Properties({ properties, setProperties, showings, buyers }) {
         </button>
         {showImport && (
           <div className="import-body">
+            {/* Excel 上傳 */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#1a1a1a",marginBottom:8}}>方法一：直接上傳 Excel 檔案</div>
+              <label style={{display:"flex",alignItems:"center",gap:10,background:"#fff8f3",border:"2px dashed #e8722a",borderRadius:12,padding:"14px 16px",cursor:"pointer",color:"#e8722a",fontSize:14,fontWeight:600}}>
+                📂 上傳 .xlsx 檔案（自動辨識分頁）
+                <input type="file" accept=".xlsx,.xls" onChange={e=>{
+                  const file=e.target.files[0];
+                  if(!file) return;
+                  setImportMsg("讀取中…"); setImportStats(null);
+                  const reader=new FileReader();
+                  reader.onload=ev=>{
+                    try {
+                      // Use SheetJS to read Excel
+                      const wb = XLSX.read(ev.target.result, {type:"array", cellDates:true});
+                      const SKIP = ["主攻開發信","買方","樂善店","買方斡旋中","買方斡","班表","行事曆"];
+                      const CATEGORY_MAP = {
+                        "口約":"口約", "租件":"出租", "租":"出租",
+                        "0-999":"售屋","1000":"售屋","1500":"售屋","2000":"售屋","3000":"售屋",
+                      };
+                      let totalAdded=0, totalUpdated=0, totalUnchanged=0;
+                      const allImported = [];
+                      wb.SheetNames.forEach(sheetName=>{
+                        if(SKIP.some(s=>sheetName.includes(s))) return;
+                        const ws = wb.Sheets[sheetName];
+                        const rows = XLSX.utils.sheet_to_json(ws, {defval:""});
+                        if(rows.length===0) return;
+                        const firstRow = rows[0];
+                        const hasRent = "租金" in firstRow;
+                        const hasName = "社區(物件)" in firstRow || "社區" in firstRow;
+                        if(!hasName) return; // skip non-property sheets
+                        let cat = "售屋";
+                        if(hasRent || sheetName.includes("租")) cat="出租";
+                        else if(sheetName.includes("口約")) cat="口約";
+                        const imported = rows
+                          .filter(r=>(r["社區(物件)"]||r["社區"]||"").toString().trim())
+                          .map(r=>rowToProperty(r, cat));
+                        allImported.push(...imported);
+                      });
+                      // Merge with existing
+                      setProperties(currentProps=>{
+                        const result=[...currentProps];
+                        allImported.forEach(np=>{
+                          const exIdx=result.findIndex(e=>e.name===np.name&&(e.propCategory||"售屋")===np.propCategory);
+                          if(exIdx===-1){result.push(np);totalAdded++;}
+                          else{
+                            const ex=result[exIdx];
+                            if(ex.price!==np.price||ex.rent!==np.rent||ex.floor!==np.floor){result[exIdx]={...np,id:ex.id};totalUpdated++;}
+                            else totalUnchanged++;
+                          }
+                        });
+                        const obj={}; result.forEach(p=>{obj[p.id]=p;}); fbSave("re_props3",obj);
+                        return result;
+                      });
+                      setImportStats({added:totalAdded,updated:totalUpdated,unchanged:totalUnchanged});
+                      setImportMsg("ok");
+                    } catch(err) {
+                      setImportMsg("❌ 讀取失敗："+err.message);
+                    }
+                  };
+                  reader.readAsArrayBuffer(file);
+                }} style={{display:"none"}}/>
+              </label>
+              {importMsg==="讀取中…"&&<div style={{fontSize:12,color:"#e8722a",marginTop:6}}>⏳ 讀取中…</div>}
+            </div>
+            <div style={{borderTop:"1px solid #e0d6ca",paddingTop:14,marginBottom:10}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#1a1a1a",marginBottom:8}}>方法二：從 Google Sheets 複製貼上</div>
+            </div>
             <div className="import-steps">
               <div className="import-step" style={{color:"#e8722a",fontWeight:700}}>① 先選擇物件類型（重要！）</div>
               <div className="import-step">② 開啟 Google Sheets → 選分頁 → 全選複製</div>

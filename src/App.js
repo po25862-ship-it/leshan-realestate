@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { db } from "./firebase";
 import { ref, onValue, set, off } from "firebase/database";
 
+// shared=true: visible to all users of this artifact
 const fbSave = (key, val) => { try { set(ref(db, key), val); } catch(_){} };
 const fbListen = (key, cb) => {
   const r = ref(db, key);
@@ -17,7 +18,7 @@ const load = async (key, fb, shared=false) => {
   try { const v = localStorage.getItem(key); if(v) return JSON.parse(v); } catch(_){}
   return fb;
 };
-const uid = () => Math.random().toString(36).slice(2,8);
+const uid = () => Math.random().toString(36).slice(2,8); // v2.1
 
 // ── Seed Data ─────────────────────────────────────────────────────────────────
 const SEED_PROPS = [
@@ -41,42 +42,44 @@ function parseSheetText(text) {
 }
 
 function rowToProperty(row, forceCategory="") {
-  const name = row["社區(物件)"]||row["社區"]||row["物件名稱"]||"";
+  // Name detection - skip URL-like values
+  const rawName = row["社區(物件)"]||row["社區"]||row["物件名稱"]||"";
+  const isUrl = rawName.startsWith("http")||rawName.startsWith("www");
+  // For rentals: use address or district+type as name if no proper name
+  const district2 = row["區域"]||row["行政區"]||"";
+  const type2 = row["型態"]||row["類型"]||"";
+  const address2 = row["地址"]||"";
+  const autoName = address2 ? address2.slice(0,15) : (district2&&type2 ? district2+"·"+type2 : "");
+  const name = isUrl ? autoName : (rawName || autoName);
+  // URL: from 網址 column, or from 社區(物件) if it's a URL
+  const url = row["網址"]||row["連結"]||row["url"]||(isUrl?rawName:"");
   const district = row["區域"]||row["行政區"]||"";
   const layout = row["格局(房/廳/衛/陽)"]||row["格局"]||"";
   const rooms = parseInt(layout.split("/")[0])||0;
   const floor = row["樓層"]||"";
   const type = row["型態"]||row["類型"]||"";
   const parking = (row["車位"]==="TRUE"||row["車位"]==="有")?"有車位":"";
-  // Detect category
   const hasRent = !!(row["租金"]||row["月租"]);
   const propCategory = forceCategory || (hasRent ? "出租" : "售屋");
-  // Sale fields
   const price = parseFloat(row["開價"]||row["售價"]||"0")||0;
   const area = parseFloat(row["權狀坪數"]||row["坪數"]||"0")||0;
-  // Rental fields
   const rent = row["租金"]||row["月租"]||"";
   const serviceFee = row["服務費"]||"";
   const address = row["地址"]||"";
-  // Verbal/口約 fields
   const netArea = row["扣車坪數"]||"";
   const unitPrice = row["單價/坪(扣車)"]||row["單價/坪"]||"";
   const showingType = row["帶看方式"]||"";
+  const agent2 = row["開發"]||"";
   const special = row["特殊事項"]||"";
-  const agent = row["開發"]||"";
-  const netArea = row["扣車坪數"]||"";
-  const unitPrice = row["單價/坪(扣車)"]||row["單價/坪"]||"";
   const mandate = row["委託狀態"]||"";
   const mandateEnd = row["委託到期日"]||"";
-  const url = row["網址"]||row["連結"]||"";
-  const features = [parking,showingType,special].filter(Boolean).join(",");
   const noteParts = [];
-  if(agent) noteParts.push("開發:"+agent);
+  if(agent2) noteParts.push("開發:"+agent2);
   if(netArea) noteParts.push("扣車坪:"+netArea);
   if(unitPrice) noteParts.push("單價:"+unitPrice+"萬/坪");
   if(mandate) noteParts.push(mandate);
   if(mandateEnd) noteParts.push("到期:"+mandateEnd);
-  return { id:uid(), name:name||"未命名", propCategory, price, area, rooms, district, floor, type, layout, parking, url, features, notes:noteParts.join(" · "), rent, serviceFee, address, netArea, unitPrice, agent2:row["開發"]||"", showingType:row["帶看方式"]||"", _fromSheet:true };
+  return { id:uid(), name:name||"未命名", propCategory, price, area, rooms, district, floor, type, layout, parking, url, features:special, notes:noteParts.join(" · "), rent, serviceFee, address, netArea, unitPrice, agent2, showingType, _fromSheet:true };
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
@@ -1631,6 +1634,7 @@ function Properties({ properties, setProperties, showings, buyers }) {
   const [importStats, setImportStats] = useState(null);
   const [importCategory, setImportCategory] = useState("售屋");
   const [filterCategory, setFilterCategory] = useState("全部");
+  useEffect(()=>{ if(filterCategory!=="全部") setImportCategory(filterCategory); },[filterCategory]);
   const upd=(k,v)=>setForm(p=>({...p,[k]:v}));
   const openDetail=p=>{ setSelected(p); setView("detail"); };
   const openNew=(cat="售屋")=>{ setForm({id:uid(),name:"",propCategory:cat,price:"",area:"",rooms:"",district:"",floor:"",type:"",layout:"",parking:"",features:"",notes:"",_fromSheet:false}); setSelected(null); setView("form"); };
@@ -1679,16 +1683,22 @@ function Properties({ properties, setProperties, showings, buyers }) {
         <div className="page-title" style={{marginBottom:0}}>{selected?"編輯物件":"新增物件"}</div>
       </div>
 
-      {/* 物件類型 */}
+      {/* 物件類型 - 新增時可選擇，編輯時只顯示目前類型 */}
       <div className="field-wrap">
         <label className="field-label">物件類型</label>
-        <div style={{display:"flex",gap:8}}>
-          {["售屋","出租","口約"].map(t=>(
-            <button key={t} onClick={()=>upd("propCategory",t)} style={{flex:1,padding:"10px",background:(form.propCategory||"售屋")===t?"#e8722a":"#f5f0eb",border:"1px solid",borderColor:(form.propCategory||"售屋")===t?"#e8722a":"#e0d6ca",borderRadius:10,color:(form.propCategory||"售屋")===t?"#fff":"#666666",fontFamily:"Noto Sans TC,sans-serif",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-              {t==="售屋"?"🏠":t==="出租"?"🔑":"🤝"} {t}
-            </button>
-          ))}
-        </div>
+        {selected ? (
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:(form.propCategory||"售屋")==="出租"?"#eff6ff":(form.propCategory||"售屋")==="口約"?"#f5f3ff":"#fff8f3",border:"2px solid",borderColor:(form.propCategory||"售屋")==="出租"?"#3b82f6":(form.propCategory||"售屋")==="口約"?"#8b5cf6":"#e8722a",borderRadius:10,padding:"10px 16px",fontSize:14,fontWeight:700,color:(form.propCategory||"售屋")==="出租"?"#3b82f6":(form.propCategory||"售屋")==="口約"?"#8b5cf6":"#e8722a"}}>
+            {(form.propCategory||"售屋")==="出租"?"🔑 出租物件":(form.propCategory||"售屋")==="口約"?"🤝 口約物件":"🏠 售屋物件"}
+          </div>
+        ) : (
+          <div style={{display:"flex",gap:8}}>
+            {["售屋","出租","口約"].map(t=>(
+              <button key={t} onClick={()=>upd("propCategory",t)} style={{flex:1,padding:"10px",background:(form.propCategory||"售屋")===t?"#e8722a":"#f5f0eb",border:"1px solid",borderColor:(form.propCategory||"售屋")===t?"#e8722a":"#e0d6ca",borderRadius:10,color:(form.propCategory||"售屋")===t?"#fff":"#666666",fontFamily:"Noto Sans TC,sans-serif",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                {t==="售屋"?"🏠":t==="出租"?"🔑":"🤝"} {t}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 共用基本欄位 */}
@@ -2024,14 +2034,62 @@ function Properties({ properties, setProperties, showings, buyers }) {
 
   const CATS = ["全部","售屋","出租","口約"];
   const CAT_COLORS = {"售屋":"#e8722a","出租":"#3b82f6","口約":"#8b5cf6"};
-  const filteredProps = filterCategory==="全部" ? properties : properties.filter(p=>(p.propCategory||"售屋")===filterCategory);
+  const [filterPrice, setFilterPrice] = useState({min:"",max:""});
+  const [filterRooms, setFilterRooms] = useState("");
+  const [filterFloor, setFilterFloor] = useState("");
+  const [showFilter, setShowFilter] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  const filteredProps = properties.filter(p=>{
+    if(filterCategory!=="全部" && (p.propCategory||"售屋")!==filterCategory) return false;
+    // Price filter (售屋/口約)
+    if((p.propCategory||"售屋")!=="出租") {
+      if(filterPrice.min && p.price < Number(filterPrice.min)) return false;
+      if(filterPrice.max && p.price > Number(filterPrice.max)) return false;
+    }
+    // Rooms filter
+    if(filterRooms) {
+      const r = parseInt(p.layout?.split("/")[0]||p.rooms||0);
+      if(r !== parseInt(filterRooms)) return false;
+    }
+    // Floor filter
+    if(filterFloor && p.floor && !p.floor.includes(filterFloor)) return false;
+    return true;
+  });
+  const hasFilter = filterPrice.min||filterPrice.max||filterRooms||filterFloor;
 
   return (
     <div className="page">
       <div className="page-nav">
         <div className="page-title" style={{marginBottom:0}}>物件庫（{filteredProps.length}）</div>
-        <button className="add-btn" onClick={()=>openNew(filterCategory==="全部"?"售屋":filterCategory)}>＋ 新增</button>
+        <div style={{display:"flex",gap:8}}>
+          {selectMode ? (
+            <>
+              <button onClick={()=>{
+                if(selectedIds.length>0){
+                  setProperties(prev=>prev.filter(p=>!selectedIds.includes(p.id)));
+                  setSelectedIds([]); setSelectMode(false);
+                }
+              }} style={{background:"#ff3b30",border:"none",borderRadius:20,padding:"8px 14px",color:"#fff",fontFamily:"Noto Sans TC,sans-serif",fontSize:13,fontWeight:700,cursor:"pointer"}} disabled={selectedIds.length===0}>
+                🗑 刪除（{selectedIds.length}）
+              </button>
+              <button onClick={()=>{setSelectMode(false);setSelectedIds([]);}} style={{background:"#f5f0eb",border:"1px solid #e0d6ca",borderRadius:20,padding:"8px 14px",color:"#666666",fontFamily:"Noto Sans TC,sans-serif",fontSize:13,cursor:"pointer"}}>取消</button>
+            </>
+          ) : (
+            <>
+              <button onClick={()=>setSelectMode(true)} style={{background:"#f5f0eb",border:"1px solid #e0d6ca",borderRadius:20,padding:"8px 12px",color:"#666666",fontFamily:"Noto Sans TC,sans-serif",fontSize:13,cursor:"pointer"}}>☑ 多選</button>
+              <button className="add-btn" onClick={()=>openNew(filterCategory==="全部"?"售屋":filterCategory)}>＋ 新增</button>
+            </>
+          )}
+        </div>
       </div>
+      {selectMode && selectedIds.length>0 && (
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fff8f3",border:"1px solid #e8d5c0",borderRadius:10,padding:"8px 14px",marginBottom:10}}>
+          <span style={{fontSize:13,color:"#e8722a",fontWeight:700}}>已選 {selectedIds.length} 筆</span>
+          <button onClick={()=>setSelectedIds(filteredProps.map(p=>p.id))} style={{background:"none",border:"none",color:"#e8722a",fontSize:13,cursor:"pointer",fontFamily:"Noto Sans TC,sans-serif"}}>全選（{filteredProps.length}）</button>
+        </div>
+      )}
 
       {/* Category filter tabs */}
       <div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto",paddingBottom:2}}>
@@ -2040,7 +2098,7 @@ function Properties({ properties, setProperties, showings, buyers }) {
           const isActive = filterCategory===cat;
           const color = CAT_COLORS[cat]||"#e8722a";
           return (
-            <button key={cat} onClick={()=>setFilterCategory(cat)} style={{
+            <button key={cat} onClick={()=>{setFilterCategory(cat);setSelectMode(false);setSelectedIds([]);}} style={{
               flexShrink:0, padding:"8px 14px", borderRadius:20,
               background: isActive ? color : "#f5f0eb",
               border: "1px solid", borderColor: isActive ? color : "#e0d6ca",
@@ -2052,6 +2110,46 @@ function Properties({ properties, setProperties, showings, buyers }) {
           );
         })}
       </div>
+
+      {/* Filter panel */}
+      {(filterCategory==="售屋"||filterCategory==="口約"||filterCategory==="全部") && (
+        <div style={{marginBottom:10}}>
+          <button onClick={()=>setShowFilter(v=>!v)} style={{display:"flex",alignItems:"center",gap:6,background:hasFilter?"#fff8f3":"#f5f0eb",border:"1px solid",borderColor:hasFilter?"#e8722a":"#e0d6ca",borderRadius:20,padding:"7px 14px",color:hasFilter?"#e8722a":"#666666",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"Noto Sans TC,sans-serif"}}>
+            🔍 篩選條件 {hasFilter?"（已設定）":""} {showFilter?"▲":"▼"}
+          </button>
+          {showFilter && (
+            <div style={{background:"#f5f0eb",border:"1px solid #e0d6ca",borderRadius:14,padding:"14px",marginTop:8}}>
+              <div className="two-col" style={{marginBottom:8}}>
+                <div className="field-wrap" style={{marginBottom:0}}>
+                  <label className="field-label">最低價（萬）</label>
+                  <input type="number" placeholder="500" value={filterPrice.min} onChange={e=>setFilterPrice(p=>({...p,min:e.target.value}))} style={{fontSize:13}}/>
+                </div>
+                <div className="field-wrap" style={{marginBottom:0}}>
+                  <label className="field-label">最高價（萬）</label>
+                  <input type="number" placeholder="2000" value={filterPrice.max} onChange={e=>setFilterPrice(p=>({...p,max:e.target.value}))} style={{fontSize:13}}/>
+                </div>
+              </div>
+              <div className="two-col" style={{marginBottom:8}}>
+                <div className="field-wrap" style={{marginBottom:0}}>
+                  <label className="field-label">房數</label>
+                  <select value={filterRooms} onChange={e=>setFilterRooms(e.target.value)} style={{fontSize:13}}>
+                    <option value="">不限</option>
+                    {["1","2","3","4","5"].map(v=><option key={v} value={v}>{v}房</option>)}
+                  </select>
+                </div>
+                <div className="field-wrap" style={{marginBottom:0}}>
+                  <label className="field-label">樓層含</label>
+                  <input placeholder="例：3、頂樓、1F" value={filterFloor} onChange={e=>setFilterFloor(e.target.value)} style={{fontSize:13}}/>
+                </div>
+              </div>
+              <button onClick={()=>{setFilterPrice({min:"",max:""});setFilterRooms("");setFilterFloor("");}} style={{background:"none",border:"1px solid #e0d6ca",borderRadius:8,padding:"6px 12px",color:"#888888",fontSize:12,cursor:"pointer",fontFamily:"Noto Sans TC,sans-serif"}}>
+                ✕ 清除篩選
+              </button>
+              <div style={{fontSize:11,color:"#e8722a",marginTop:6}}>找到 {filteredProps.length} 筆</div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Quick add buttons when filtered */}
       {filterCategory!=="全部" && (
@@ -2074,7 +2172,7 @@ function Properties({ properties, setProperties, showings, buyers }) {
         {showImport && (
           <div className="import-body">
             <div className="import-steps">
-              <div className="import-step">① 選擇物件類型</div>
+              <div className="import-step" style={{color:"#e8722a",fontWeight:700}}>① 先選擇物件類型（重要！）</div>
               <div className="import-step">② 開啟 Google Sheets → 選分頁 → 全選複製</div>
               <div className="import-step">③ 貼到下方 → 智能匯入</div>
             </div>
@@ -2095,8 +2193,9 @@ function Properties({ properties, setProperties, showings, buyers }) {
           </div>
         )}
       </div>
-      {properties.length===0 ? <Empty icon="🏠" text="尚無物件"/> : properties.map(p=>(
-        <div className="list-card" key={p.id} onClick={()=>openDetail(p)} style={{flexDirection:"column",gap:0,alignItems:"stretch"}}>
+      {filteredProps.length===0 ? <Empty icon="🏠" text={filterCategory==="全部"?"尚無物件":"尚無"+filterCategory+"物件"}/> : filteredProps.map(p=>(
+        <div className="list-card" key={p.id} onClick={()=>{ if(selectMode){ setSelectedIds(prev=>prev.includes(p.id)?prev.filter(x=>x!==p.id):[...prev,p.id]); } else openDetail(p); }} style={{flexDirection:"column",gap:0,alignItems:"stretch",background:selectedIds.includes(p.id)?"#fff8f3":"#ffffff",borderColor:selectedIds.includes(p.id)?"#e8722a":"#e0d6ca",position:"relative"}}>
+            {selectMode && <div style={{position:"absolute",top:12,right:12,width:22,height:22,borderRadius:6,background:selectedIds.includes(p.id)?"#e8722a":"#fff",border:"2px solid",borderColor:selectedIds.includes(p.id)?"#e8722a":"#cccccc",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}>{selectedIds.includes(p.id)&&<span style={{color:"#fff",fontSize:13,fontWeight:700}}>✓</span>}</div>}
           <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
             <div className="list-card-main" style={{flex:1}}>
               <div className="list-card-title">
@@ -2107,18 +2206,16 @@ function Properties({ properties, setProperties, showings, buyers }) {
                 {p.name}
               </div>
               <div className="list-card-sub">
-                {[p.district,
-                  p.areaMain?(((Number(p.areaMain)||0)+(Number(p.areaSub)||0)+(Number(p.areaCommon)||0)+(Number(p.areaParking)||0)).toFixed(1)+"坪"):p.area?(p.area+"坪"):"",
-                  p.layout||(p.rooms?(p.rooms+"房"):""),
-                  p.type,
-                  p.floor
-                ].filter(Boolean).join(" · ")}
+                {(p.propCategory||"售屋")==="出租"
+                  ? [p.district, p.layout||(p.rooms?(p.rooms+"房"):""), p.type, p.floor, p.rent?(Number(p.rent).toLocaleString()+"元/月"):""].filter(Boolean).join(" · ")
+                  : [p.district, p.areaMain?(((Number(p.areaMain)||0)+(Number(p.areaSub)||0)+(Number(p.areaCommon)||0)+(Number(p.areaParking)||0)).toFixed(1)+"坪"):p.area?(p.area+"坪"):"", p.layout||(p.rooms?(p.rooms+"房"):""), p.type, p.floor].filter(Boolean).join(" · ")
+                }
               </div>
               {p.notes&&<div className="list-card-note">{p.notes.slice(0,35)}{p.notes.length>35?"…":""}</div>}
             </div>
             <div style={{textAlign:"right",flexShrink:0}}>
-              {p.propCategory==="出租"
-                ? <div className="price-tag">{p.rent?(Number(p.rent).toLocaleString()+"元/月"):""}</div>
+              {(p.propCategory||"售屋")==="出租"
+                ? <div className="price-tag" style={{fontSize:13}}>{p.rent?(Number(p.rent).toLocaleString()+"元/月"):""}</div>
                 : <div className="price-tag">{p.price?(p.price+"萬"):""}</div>
               }
             </div>

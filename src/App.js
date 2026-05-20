@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
+import { db } from "./firebase";
+import { ref, onValue, set, off } from "firebase/database";
 
 // shared=true: visible to all users of this artifact
 const save = async (key, val, shared=false) => {
-  try { await window.storage.set(key, JSON.stringify(val), shared); } catch(_){}
-  try { localStorage.setItem(key+(shared?"_s":""), JSON.stringify(val)); } catch(_){}
+  if(shared) { fbSave(key, val); return; }
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch(_){}
 };
 const load = async (key, fb, shared=false) => {
-  try { const r = await window.storage.get(key, shared); if(r) return JSON.parse(r.value); } catch(_){}
-  try { const v = localStorage.getItem(key+(shared?"_s":"")); if(v) return JSON.parse(v); } catch(_){}
+  if(shared) return fb;
+  try { const v = localStorage.getItem(key); if(v) return JSON.parse(v); } catch(_){}
   return fb;
 };
 const uid = () => Math.random().toString(36).slice(2,8); // v2.1

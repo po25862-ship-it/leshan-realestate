@@ -537,7 +537,7 @@ function BuyerDetail({ b, mc, bShowings, properties, events, setEvents, onEdit, 
   const [showAddShowing, setShowAddShowing] = useState(false);
   const [privateContact, setPrivateContact] = useState({phone:"",line:""});
   useEffect(()=>{
-    try{const v=localStorage.getItem("re_contact_"+b.id);if(v)setPrivateContact(JSON.parse(v));else setPrivateContact({phone:"",line:""});}catch(_){setPrivateContact({phone:"",line":""});}
+    try{const v=localStorage.getItem("re_contact_"+b.id);if(v)setPrivateContact(JSON.parse(v));else setPrivateContact({phone:"",line:""});}catch(_){setPrivateContact({phone:"",line:""});}
   },[b.id]);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [selPropId, setSelPropId] = useState("");

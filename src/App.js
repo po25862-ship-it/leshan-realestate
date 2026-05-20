@@ -41,16 +41,27 @@ function parseSheetText(text) {
   }).filter(row=>headers.some(h=>row[h]&&row[h]!==""));
 }
 
-function rowToProperty(row) {
+function rowToProperty(row, forceCategory="") {
   const name = row["社區(物件)"]||row["社區"]||row["物件名稱"]||"";
   const district = row["區域"]||row["行政區"]||"";
-  const price = parseFloat(row["開價"]||row["售價"]||"0")||0;
-  const area = parseFloat(row["權狀坪數"]||row["坪數"]||"0")||0;
   const layout = row["格局(房/廳/衛/陽)"]||row["格局"]||"";
   const rooms = parseInt(layout.split("/")[0])||0;
   const floor = row["樓層"]||"";
   const type = row["型態"]||row["類型"]||"";
   const parking = (row["車位"]==="TRUE"||row["車位"]==="有")?"有車位":"";
+  // Detect category
+  const hasRent = !!(row["租金"]||row["月租"]);
+  const propCategory = forceCategory || (hasRent ? "出租" : "售屋");
+  // Sale fields
+  const price = parseFloat(row["開價"]||row["售價"]||"0")||0;
+  const area = parseFloat(row["權狀坪數"]||row["坪數"]||"0")||0;
+  // Rental fields
+  const rent = row["租金"]||row["月租"]||"";
+  const serviceFee = row["服務費"]||"";
+  const address = row["地址"]||"";
+  // Verbal/口約 fields
+  const netArea = row["扣車坪數"]||"";
+  const unitPrice = row["單價/坪(扣車)"]||row["單價/坪"]||"";
   const showingType = row["帶看方式"]||"";
   const special = row["特殊事項"]||"";
   const agent = row["開發"]||"";
@@ -66,7 +77,7 @@ function rowToProperty(row) {
   if(unitPrice) noteParts.push("單價:"+unitPrice+"萬/坪");
   if(mandate) noteParts.push(mandate);
   if(mandateEnd) noteParts.push("到期:"+mandateEnd);
-  return { id:uid(), name:name||"未命名", price, area, rooms, district, floor, type, layout, url, features, notes:noteParts.join(" · "), _fromSheet:true };
+  return { id:uid(), name:name||"未命名", propCategory, price, area, rooms, district, floor, type, layout, parking, url, features, notes:noteParts.join(" · "), rent, serviceFee, address, netArea, unitPrice, agent2:row["開發"]||"", showingType:row["帶看方式"]||"", _fromSheet:true };
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
@@ -534,7 +545,7 @@ function BuyerDetail({ b, mc, bShowings, properties, events, setEvents, onEdit, 
   const [showAddShowing, setShowAddShowing] = useState(false);
   const [privateContact, setPrivateContact] = useState({phone:"",line:""});
   useEffect(()=>{
-    load("re_contact_"+b.id).then(c=>{ if(c) setPrivateContact(c); else setPrivateContact({phone:"",line:""}); });
+    try{const v=localStorage.getItem("re_contact_"+b.id);if(v)setPrivateContact(JSON.parse(v));else setPrivateContact({phone:"",line:""});}catch(_){setPrivateContact({phone:"",line":""});}
   },[b.id]);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [selPropId, setSelPropId] = useState("");
@@ -1619,6 +1630,7 @@ function Properties({ properties, setProperties, showings, buyers }) {
   const [pasteText, setPasteText] = useState("");
   const [importMsg, setImportMsg] = useState("");
   const [importStats, setImportStats] = useState(null);
+  const [importCategory, setImportCategory] = useState("售屋");
   const [filterCategory, setFilterCategory] = useState("全部");
   const upd=(k,v)=>setForm(p=>({...p,[k]:v}));
   const openDetail=p=>{ setSelected(p); setView("detail"); };
@@ -1635,7 +1647,7 @@ function Properties({ properties, setProperties, showings, buyers }) {
     setImportMsg(""); setImportStats(null);
     const rows=parseSheetText(pasteText);
     if(rows.length===0){ setImportMsg("⚠️ 沒有讀到資料"); return; }
-    const imported=rows.map(rowToProperty).filter(p=>p.name&&p.name!=="未命名");
+    const imported=rows.map(row=>rowToProperty(row,importCategory)).filter(p=>p.name&&p.name!=="未命名");
     if(imported.length===0){ setImportMsg("⚠️ 無法辨識欄位"); return; }
     let added=0,updated=0,unchanged=0;
     const manual=properties.filter(p=>!p._fromSheet);
@@ -1895,8 +1907,11 @@ function Properties({ properties, setProperties, showings, buyers }) {
           {p.floor&&<InfoItem label="樓層" val={p.floor}/>}
           {p.type&&<InfoItem label="類型" val={p.type}/>}
           {p.layout&&<InfoItem label="格局" val={p.layout}/>}
+          {p.parking&&p.parking!=="無"&&<InfoItem label="車位" val={p.parking}/>}
+          {p.showingType&&<InfoItem label="帶看方式" val={p.showingType}/>}
+          {p.agent2&&<InfoItem label="開發業務" val={p.agent2}/>}
         </div>
-        {p.features&&<div className="info-box"><div className="info-box-label">特色</div>{p.features}</div>}
+        {p.features&&<div className="info-box"><div className="info-box-label">特殊事項</div>{p.features}</div>}
         {p.notes&&<div className="info-box"><div className="info-box-label">備註</div>{p.notes}</div>}
 
         {/* Links */}
@@ -2047,8 +2062,16 @@ function Properties({ properties, setProperties, showings, buyers }) {
         {showImport && (
           <div className="import-body">
             <div className="import-steps">
-              <div className="import-step">① 開啟 Google Sheets → 選分頁 → 全選複製</div>
-              <div className="import-step">② 貼到下方 → 智能匯入</div>
+              <div className="import-step">① 選擇物件類型</div>
+              <div className="import-step">② 開啟 Google Sheets → 選分頁 → 全選複製</div>
+              <div className="import-step">③ 貼到下方 → 智能匯入</div>
+            </div>
+            <div style={{display:"flex",gap:6,margin:"8px 0"}}>
+              {["售屋","出租","口約"].map(cat=>(
+                <button key={cat} onClick={()=>setImportCategory(cat)} style={{flex:1,padding:"8px",background:importCategory===cat?"#e8722a":"#f5f0eb",border:"1px solid",borderColor:importCategory===cat?"#e8722a":"#e0d6ca",borderRadius:8,color:importCategory===cat?"#fff":"#666666",fontFamily:"Noto Sans TC,sans-serif",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                  {cat==="售屋"?"🏠":cat==="出租"?"🔑":"🤝"} {cat}
+                </button>
+              ))}
             </div>
             <div className="field-wrap" style={{marginTop:10}}>
               <label className="field-label">貼上資料</label>

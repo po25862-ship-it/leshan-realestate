@@ -1635,7 +1635,7 @@ function Properties({ properties, setProperties, showings, buyers }) {
   const upd=(k,v)=>setForm(p=>({...p,[k]:v}));
   const openDetail=p=>{ setSelected(p); setView("detail"); };
   const openNew=(cat="售屋")=>{ setForm({id:uid(),name:"",propCategory:cat,price:"",area:"",rooms:"",district:"",floor:"",type:"",layout:"",parking:"",features:"",notes:"",_fromSheet:false}); setSelected(null); setView("form"); };
-  const openEdit=p=>{ setForm({...p}); setSelected(p); setView("form"); };
+  const openEdit=p=>{ setForm({...p, propCategory:p.propCategory||"售屋"}); setSelected(p); setView("form"); };
   const doSave=()=>{
     const rec={...form,price:Number(form.price),area:Number(form.area),rooms:Number(form.rooms)};
     setProperties(prev=>{ const e=prev.find(x=>x.id===rec.id); return e?prev.map(x=>x.id===rec.id?rec:x):[...prev,rec]; });
@@ -1650,10 +1650,19 @@ function Properties({ properties, setProperties, showings, buyers }) {
     const imported=rows.map(row=>rowToProperty(row,importCategory)).filter(p=>p.name&&p.name!=="未命名");
     if(imported.length===0){ setImportMsg("⚠️ 無法辨識欄位"); return; }
     let added=0,updated=0,unchanged=0;
-    const manual=properties.filter(p=>!p._fromSheet);
-    const existing=properties.filter(p=>p._fromSheet);
-    const merged=imported.map(np=>{ const ex=existing.find(e=>e.name===np.name); if(!ex){added++;return np;} if(ex.price!==np.price||ex.area!==np.area||ex.floor!==np.floor){updated++;return{...np,id:ex.id};} unchanged++;return ex; });
-    setProperties([...manual,...merged]);
+    // Keep all existing properties, only update/add the imported ones
+    const existingSameCategory = properties.filter(p=>(p.propCategory||"售屋")===importCategory && p._fromSheet);
+    const otherProps = properties.filter(p=>(p.propCategory||"售屋")!==importCategory || !p._fromSheet);
+    // Match by name within same category
+    const merged = imported.map(np=>{
+      const ex = existingSameCategory.find(e=>e.name===np.name);
+      if(!ex){ added++; return np; }
+      if(ex.price!==np.price||ex.area!==np.area||ex.floor!==np.floor||ex.rent!==np.rent){ updated++; return{...np,id:ex.id}; }
+      unchanged++; return ex;
+    });
+    // Also keep existing same-category items that weren't in the import (manually added)
+    const manualSameCat = existingSameCategory.filter(e=>!imported.find(np=>np.name===e.name)&&!e._fromSheet);
+    setProperties([...otherProps,...manualSameCat,...merged]);
     setImportStats({added,updated,unchanged}); setImportMsg("ok"); setPasteText("");
   };
 
@@ -1669,7 +1678,7 @@ function Properties({ properties, setProperties, showings, buyers }) {
         <label className="field-label">物件類型 *</label>
         <div style={{display:"flex",gap:8}}>
           {["售屋","出租","口約"].map(t=>(
-            <button key={t} onClick={()=>upd("propCategory",t)} style={{flex:1,padding:"10px",background:form.propCategory===t?"#e8722a":"#f5f0eb",border:"1px solid",borderColor:form.propCategory===t?"#e8722a":"#e0d6ca",borderRadius:10,color:form.propCategory===t?"#fff":"#666666",fontFamily:"Noto Sans TC,sans-serif",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+            <button key={t} onClick={()=>upd("propCategory",t)} style={{flex:1,padding:"10px",background:(form.propCategory||"售屋")===t?"#e8722a":"#f5f0eb",border:"1px solid",borderColor:(form.propCategory||"售屋")===t?"#e8722a":"#e0d6ca",borderRadius:10,color:(form.propCategory||"售屋")===t?"#fff":"#666666",fontFamily:"Noto Sans TC,sans-serif",fontSize:14,fontWeight:700,cursor:"pointer"}}>
               {t==="售屋"?"🏠 售屋":t==="出租"?"🔑 出租":"🤝 口約"}
             </button>
           ))}
@@ -1702,7 +1711,7 @@ function Properties({ properties, setProperties, showings, buyers }) {
       <div className="field-wrap"><label className="field-label">樓層</label><input placeholder="例：3/15、頂樓、5F" value={form.floor||""} onChange={e=>upd("floor",e.target.value)}/></div>
 
       {/* 售屋欄位 */}
-      {(!form.propCategory||form.propCategory==="售屋") && <>
+      {(form.propCategory==="售屋"||!form.propCategory||form.propCategory==="") && <>
         <div className="section-hd">售屋資訊</div>
         <div className="field-wrap"><label className="field-label">開價（萬）*</label><input type="number" value={form.price||""} onChange={e=>upd("price",e.target.value)}/></div>
         <div className="two-col">

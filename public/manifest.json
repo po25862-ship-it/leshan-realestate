@@ -1,0 +1,8 @@
+{
+  "short_name": "樂善店",
+  "name": "捷運樂善店業務助手",
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#ffffff",
+  "background_color": "#ffffff"
+}

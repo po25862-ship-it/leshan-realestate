@@ -93,22 +93,30 @@ export default function App() {
   const saveEvents = (data) => { setEvents(data); const userEvs=data.filter(e=>!e.isSchedule); const obj={}; userEvs.forEach(e=>{obj[e.id]=e;}); fbSave("re_events",obj); };
 
   useEffect(()=>{
-    (async()=>{
-      try { const s=localStorage.getItem("re_session"); if(s){ const u=JSON.parse(s); if(u&&u.user) setCurrentUser(u.user); } } catch(_){}
-      fbListen("re_props3", data => { setProperties(data ? (Array.isArray(data)?data:Object.values(data)) : SEED_PROPS); }),
-      fbListen("re_buyers", data => { setBuyers(data ? (Array.isArray(data)?data:Object.values(data)) : []); }),
-      fbListen("re_showings3", data => { setShowings(data ? (Array.isArray(data)?data:Object.values(data)) : []); }),
-      const savedEvents = await load("re_events", null, true);
-      if (savedEvents) {
-        // merge: keep schedule events + user events
-        const userEvs = savedEvents.filter(e => !e.isSchedule);
-        const schedEvs = MAY_SCHEDULE;
-        setEvents([...schedEvs, ...userEvs]);
-      } else {
-        setEvents(MAY_SCHEDULE);
-      }
-      setReady(true);
-    })();
+    // Restore session
+    try {
+      const s = localStorage.getItem("re_session");
+      if(s) { const u=JSON.parse(s); if(u&&u.user) setCurrentUser(u.user); }
+    } catch(_){}
+
+    // Firebase listeners for shared data
+    const u1 = fbListen("re_accounts", data => { if(data) setAccounts(data); });
+    const u2 = fbListen("re_props3", data => {
+      setProperties(data ? (Array.isArray(data)?data:Object.values(data)) : SEED_PROPS);
+    });
+    const u3 = fbListen("re_buyers", data => {
+      setBuyers(data ? (Array.isArray(data)?data:Object.values(data)) : []);
+    });
+    const u4 = fbListen("re_showings3", data => {
+      setShowings(data ? (Array.isArray(data)?data:Object.values(data)) : []);
+    });
+    const u5 = fbListen("re_events", data => {
+      const userEvs = data ? (Array.isArray(data)?data:Object.values(data)).filter(e=>!e.isSchedule) : [];
+      setEvents([...MAY_SCHEDULE, ...userEvs]);
+    });
+
+    setReady(true);
+    return () => { u1(); u2(); u3(); u4(); u5(); };
   },[]);
 
   useEffect(()=>{ if(currentUser) try{const v=localStorage.getItem("re_myclients_"+currentUser);if(v)setMyClients(JSON.parse(v));}catch(_){} },[currentUser]);

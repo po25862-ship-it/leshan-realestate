@@ -1,25 +1,21 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { db } from "./firebase";
 import { ref, onValue, set, off } from "firebase/database";
 
 
-// Firebase helpers for shared data
-const fbSave = (key, val) => {
-  try { set(ref(db, key), val); } catch(_){}
-};
+// shared=true: visible to all users of this artifact
+const fbSave = (key, val) => { try { set(ref(db, key), val); } catch(_){} };
 const fbListen = (key, cb) => {
   const r = ref(db, key);
   onValue(r, snap => cb(snap.exists() ? snap.val() : null));
   return () => off(r);
 };
-
-// Local storage for private data
 const save = async (key, val, shared=false) => {
   if(shared) { fbSave(key, val); return; }
   try { localStorage.setItem(key, JSON.stringify(val)); } catch(_){}
 };
 const load = async (key, fb, shared=false) => {
-  if(shared) return fb; // Firebase handled via listeners
+  if(shared) return fb;
   try { const v = localStorage.getItem(key); if(v) return JSON.parse(v); } catch(_){}
   return fb;
 };
@@ -81,7 +77,7 @@ export default function App() {
   const [loginName, setLoginName] = useState("");
   const [loginPass, setLoginPass] = useState("");
   const [loginInvite, setLoginInvite] = useState("");
-  const [loginMode, setLoginMode] = useState("login"); // login | register
+  const [loginMode, setLoginMode] = useState("login");
   const [loginError, setLoginError] = useState("");
   const [accounts, setAccounts] = useState({});
   const [properties, setProperties] = useState([]);
@@ -91,8 +87,6 @@ export default function App() {
   const [events, setEvents] = useState([]);
   const MAY_SCHEDULE = [{"id": "6115jo", "title": "勞動節", "date": "2026-05-01", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "流通會議 | 值班：采萱 | 休假：韋伶", "agent": "系統", "isSchedule": true, "duty": "采萱", "offDuty": "韋伶"}, {"id": "9555ph", "title": "休假日", "date": "2026-05-02", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：慶祥 | 休假：五哥、韋伶、采萱", "agent": "系統", "isSchedule": true, "duty": "慶祥", "offDuty": "五哥、韋伶、采萱"}, {"id": "2ybxkc", "title": "休假日", "date": "2026-05-03", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：筱涵 | 休假：五哥", "agent": "系統", "isSchedule": true, "duty": "筱涵", "offDuty": "五哥"}, {"id": "afglj7", "title": "店務", "date": "2026-05-04", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：韋伶", "agent": "系統", "isSchedule": true, "duty": "韋伶", "offDuty": ""}, {"id": "2y08jg", "title": "成長大會", "date": "2026-05-05", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "區月會 | 值班：哲嘉", "agent": "系統", "isSchedule": true, "duty": "哲嘉", "offDuty": ""}, {"id": "mgji0g", "title": "店內教育訓練", "date": "2026-05-06", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：慶祥", "agent": "系統", "isSchedule": true, "duty": "慶祥", "offDuty": ""}, {"id": "z3vip8", "title": "店務", "date": "2026-05-07", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：五哥 | 休假：慶祥、筱涵、哲嘉", "agent": "系統", "isSchedule": true, "duty": "五哥", "offDuty": "慶祥、筱涵、哲嘉"}, {"id": "zbcs6q", "title": "集體看屋", "date": "2026-05-08", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：韋伶 | 休假：慶祥、采萱", "agent": "系統", "isSchedule": true, "duty": "韋伶", "offDuty": "慶祥、采萱"}, {"id": "av6pdm", "title": "休假日", "date": "2026-05-09", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：筱涵 | 休假：五哥、韋伶、采萱", "agent": "系統", "isSchedule": true, "duty": "筱涵", "offDuty": "五哥、韋伶、采萱"}, {"id": "darp17", "title": "休假日", "date": "2026-05-10", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：哲嘉 | 休假：韋伶", "agent": "系統", "isSchedule": true, "duty": "哲嘉", "offDuty": "韋伶"}, {"id": "1z2rf1", "title": "店務", "date": "2026-05-11", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：采萱 | 休假：筱涵、哲嘉", "agent": "系統", "isSchedule": true, "duty": "采萱", "offDuty": "筱涵、哲嘉"}, {"id": "fvl13v", "title": "店務", "date": "2026-05-12", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：慶祥 | 休假：筱涵、哲嘉", "agent": "系統", "isSchedule": true, "duty": "慶祥", "offDuty": "筱涵、哲嘉"}, {"id": "qyoadb", "title": "店務", "date": "2026-05-13", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：哲嘉", "agent": "系統", "isSchedule": true, "duty": "哲嘉", "offDuty": ""}, {"id": "0awe9k", "title": "店務", "date": "2026-05-14", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：五哥 | 休假：慶祥", "agent": "系統", "isSchedule": true, "duty": "五哥", "offDuty": "慶祥"}, {"id": "d7x84e", "title": "流通會議", "date": "2026-05-15", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "店內教育訓練 | 值班：韋伶", "agent": "系統", "isSchedule": true, "duty": "韋伶", "offDuty": ""}, {"id": "o07ijg", "title": "休假日", "date": "2026-05-16", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：筱涵 | 休假：五哥、韋伶", "agent": "系統", "isSchedule": true, "duty": "筱涵", "offDuty": "五哥、韋伶"}, {"id": "6jh8ai", "title": "休假日", "date": "2026-05-17", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "南崁區教育訓練 | 值班：韋伶 | 休假：采萱", "agent": "系統", "isSchedule": true, "duty": "韋伶", "offDuty": "采萱"}, {"id": "zs7qay", "title": "店務", "date": "2026-05-18", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：慶祥 | 休假：筱涵、哲嘉", "agent": "系統", "isSchedule": true, "duty": "慶祥", "offDuty": "筱涵、哲嘉"}, {"id": "eu1gb4", "title": "店務", "date": "2026-05-19", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：采萱 | 休假：筱涵、哲嘉", "agent": "系統", "isSchedule": true, "duty": "采萱", "offDuty": "筱涵、哲嘉"}, {"id": "u2r2yr", "title": "店務", "date": "2026-05-20", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：筱涵", "agent": "系統", "isSchedule": true, "duty": "筱涵", "offDuty": ""}, {"id": "h8eal4", "title": "店務", "date": "2026-05-21", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：五哥 | 休假：慶祥", "agent": "系統", "isSchedule": true, "duty": "五哥", "offDuty": "慶祥"}, {"id": "uaujhn", "title": "店內教育訓練", "date": "2026-05-22", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：韋伶 | 休假：慶祥", "agent": "系統", "isSchedule": true, "duty": "韋伶", "offDuty": "慶祥"}, {"id": "nxemop", "title": "店務", "date": "2026-05-23", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：哲嘉 | 休假：五哥、韋伶、采萱", "agent": "系統", "isSchedule": true, "duty": "哲嘉", "offDuty": "五哥、韋伶、采萱"}, {"id": "mqv57w", "title": "休假日", "date": "2026-05-24", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "集體看屋 | 值班：慶祥", "agent": "系統", "isSchedule": true, "duty": "慶祥", "offDuty": ""}, {"id": "ogdsbi", "title": "休假日", "date": "2026-05-25", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：采萱 | 休假：筱涵、哲嘉", "agent": "系統", "isSchedule": true, "duty": "采萱", "offDuty": "筱涵、哲嘉"}, {"id": "07v7pk", "title": "店務", "date": "2026-05-26", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：五哥 | 休假：筱涵、哲嘉、采萱", "agent": "系統", "isSchedule": true, "duty": "五哥", "offDuty": "筱涵、哲嘉、采萱"}, {"id": "f7uzdc", "title": "店務", "date": "2026-05-27", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：筱涵", "agent": "系統", "isSchedule": true, "duty": "筱涵", "offDuty": ""}, {"id": "5wl3e7", "title": "店內教育訓練", "date": "2026-05-28", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：哲嘉 | 休假：慶祥", "agent": "系統", "isSchedule": true, "duty": "哲嘉", "offDuty": "慶祥"}, {"id": "ak4gwk", "title": "店務", "date": "2026-05-29", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：韋伶", "agent": "系統", "isSchedule": true, "duty": "韋伶", "offDuty": ""}, {"id": "ckjbq3", "title": "休假日", "date": "2026-05-30", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "流通會議 | 值班：慶祥 | 休假：五哥、韋伶、采萱", "agent": "系統", "isSchedule": true, "duty": "慶祥", "offDuty": "五哥、韋伶、采萱"}, {"id": "0vswpc", "title": "休假日", "date": "2026-05-31", "time": "", "buyerId": "", "buyerName": "", "propertyId": "", "propName": "", "notes": "值班：采萱 | 休假：五哥、慶祥", "agent": "系統", "isSchedule": true, "duty": "采萱", "offDuty": "五哥、慶祥"}];
   const [ready, setReady] = useState(false);
-
-  // Firebase-synced setters
   const saveProperties = (data) => { setProperties(data); const obj={}; data.forEach(p=>{obj[p.id]=p;}); fbSave("re_props3",obj); };
   const saveBuyers = (data) => { setBuyers(data); const obj={}; data.forEach(b=>{obj[b.id]=b;}); fbSave("re_buyers",obj); };
   const saveShowings = (data) => { setShowings(data); const obj={}; data.forEach(s=>{obj[s.id]=s;}); fbSave("re_showings3",obj); };
@@ -100,10 +94,10 @@ export default function App() {
 
   useEffect(()=>{
     (async()=>{
-      try { const s=await window.storage.get("re_session"); if(s){ const u=JSON.parse(s.value); if(u&&u.user) setCurrentUser(u.user); } } catch(_){}
-      setProperties(await load("re_props3", SEED_PROPS, true));
-      setBuyers(await load("re_buyers", [], true));
-      setShowings(await load("re_showings3", [], true));
+      try { const s=localStorage.getItem("re_session"); if(s){ const u=JSON.parse(s); if(u&&u.user) setCurrentUser(u.user); } } catch(_){}
+      fbListen("re_props3", data => { setProperties(data ? (Array.isArray(data)?data:Object.values(data)) : SEED_PROPS); }),
+      fbListen("re_buyers", data => { setBuyers(data ? (Array.isArray(data)?data:Object.values(data)) : []); }),
+      fbListen("re_showings3", data => { setShowings(data ? (Array.isArray(data)?data:Object.values(data)) : []); }),
       const savedEvents = await load("re_events", null, true);
       if (savedEvents) {
         // merge: keep schedule events + user events
@@ -117,12 +111,27 @@ export default function App() {
     })();
   },[]);
 
-  useEffect(()=>{ if(currentUser) load("re_myclients_"+currentUser,[]).then(setMyClients); },[currentUser]);
-  // Shared data saved directly via fbSave in setter functions
-  useEffect(()=>{ if(currentUser&&ready) { try{localStorage.setItem("re_myclients_"+currentUser, JSON.stringify(myClients));}catch(_){} } },[myClients,currentUser,ready]);
+  useEffect(()=>{ if(currentUser) try{const v=localStorage.getItem("re_myclients_"+currentUser);if(v)setMyClients(JSON.parse(v));}catch(_){} },[currentUser]);
 
-  const doLogin = ()=>{ if(!loginName.trim()) return; save("re_session",{user:loginName.trim()}); setCurrentUser(loginName.trim()); };
-  const doLogout = ()=>{ try{window.storage.delete("re_session");}catch(_){} setCurrentUser(null); setMyClients([]); setLoginName(""); };
+  useEffect(()=>{ if(currentUser&&ready){try{localStorage.setItem("re_myclients_"+currentUser,JSON.stringify(myClients));}catch(_){}} },[myClients,currentUser,ready]);
+
+  const doLogin = ()=>{
+    const name=loginName.trim(); const pass=loginPass.trim();
+    if(!name||!pass){ setLoginError("請輸入姓名和密碼"); return; }
+    if(loginMode==="register"){
+      if(loginInvite.trim()!=="3288283"){ setLoginError("邀請碼錯誤"); return; }
+      if(accounts[name]){ setLoginError("此姓名已被註冊，請直接登入"); return; }
+      fbSave("re_accounts",{...accounts,[name]:pass});
+      localStorage.setItem("re_session",JSON.stringify({user:name,pass}));
+      setCurrentUser(name);
+    } else {
+      if(!accounts[name]){ setLoginError("帳號不存在，請先選「首次註冊」"); return; }
+      if(accounts[name]!==pass){ setLoginError("密碼錯誤"); return; }
+      localStorage.setItem("re_session",JSON.stringify({user:name,pass}));
+      setCurrentUser(name);
+    }
+  };
+  const doLogout = ()=>{ try{localStorage.removeItem("re_session");}catch(_){} setCurrentUser(null); setMyClients([]); setLoginName(""); setLoginPass(""); };
 
   const TABS = [
     {id:"dashboard",    icon:"📊", label:"總覽"},
@@ -141,24 +150,42 @@ export default function App() {
       <style>{CSS}</style>
       <div className="shell" style={{justifyContent:"center",alignItems:"center",padding:"40px 24px"}}>
         <div style={{width:"100%",maxWidth:360}}>
-          <div style={{textAlign:"center",marginBottom:40}}>
-            <div style={{fontSize:52,marginBottom:12}}>🏠</div>
-            <div style={{fontFamily:"DM Serif Display,serif",fontSize:32,color:"#1a1a1a"}}>房仲<span style={{color:"#e8722a"}}>業務助手</span></div>
-            <div style={{fontSize:11,color:"#4b5563",marginTop:8,letterSpacing:2}}>捷運樂善店</div>
+          <div style={{textAlign:"center",marginBottom:32}}>
+            <div style={{fontSize:48,marginBottom:10}}>🏠</div>
+            <div style={{fontFamily:"DM Serif Display,serif",fontSize:28,color:"#1a1a1a"}}>捷運<span style={{color:"#e8722a"}}>樂善店</span></div>
+            <div style={{fontSize:11,color:"#aaaaaa",marginTop:6,letterSpacing:2}}>REAL ESTATE PRO</div>
+          </div>
+          <div style={{display:"flex",background:"#f5f0eb",borderRadius:12,padding:4,marginBottom:20}}>
+            {["login","register"].map(m=>(
+              <button key={m} onClick={()=>{setLoginMode(m);setLoginError("");}} style={{flex:1,padding:"10px",background:loginMode===m?"#ffffff":"none",border:"none",borderRadius:10,fontFamily:"Noto Sans TC,sans-serif",fontSize:14,fontWeight:loginMode===m?700:400,color:loginMode===m?"#e8722a":"#888888",cursor:"pointer"}}>
+                {m==="login"?"登入":"首次註冊"}
+              </button>
+            ))}
           </div>
           <div className="field-wrap">
-            <label className="field-label">請輸入你的姓名</label>
-            <input placeholder="例：采萱" value={loginName} onChange={e=>setLoginName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")doLogin();}} style={{fontSize:18,textAlign:"center"}}/>
+            <label className="field-label">姓名</label>
+            <input placeholder="例：采萱" value={loginName} onChange={e=>{setLoginName(e.target.value);setLoginError("");}}/>
           </div>
-          <button className="btn-gold" onClick={doLogin} disabled={!loginName.trim()}>進入系統 →</button>
-          <div style={{fontSize:11,color:"#374151",textAlign:"center",marginTop:20,lineHeight:2}}>
-            ✦ 買方資料全員共用（電話各自保管）<br/>
-            ✦ 物件庫、帶看、行事曆共用
+          <div className="field-wrap">
+            <label className="field-label">密碼</label>
+            <input type="password" placeholder="輸入密碼" value={loginPass} onChange={e=>{setLoginPass(e.target.value);setLoginError("");}} onKeyDown={e=>{if(e.key==="Enter")doLogin();}}/>
+          </div>
+          {loginMode==="register"&&(<div className="field-wrap">
+            <label className="field-label">店內邀請碼</label>
+            <input placeholder="請輸入邀請碼" value={loginInvite} onChange={e=>{setLoginInvite(e.target.value);setLoginError("");}}/>
+          </div>)}
+          {loginError&&<div style={{background:"#fff3f3",border:"1px solid #ffcdd2",borderRadius:10,padding:"10px 14px",color:"#ff3b30",fontSize:13,marginBottom:12}}>❌ {loginError}</div>}
+          <button className="btn-gold" onClick={doLogin} disabled={!loginName.trim()||!loginPass.trim()}>
+            {loginMode==="login"?"登入 →":"註冊並登入 →"}
+          </button>
+          <div style={{fontSize:11,color:"#aaaaaa",textAlign:"center",marginTop:16,lineHeight:2}}>
+            ✦ 我的客戶資料只有自己看得到<br/>✦ 物件庫、帶看、行事曆全員共用
           </div>
         </div>
       </div>
     </>
   );
+
 
   return (
     <>
@@ -326,7 +353,7 @@ function Buyers({ buyers, setBuyers, myClients, setMyClients, properties, showin
     }
     // Save phone/line privately, strip from shared record
     if(form.phone || form.line) {
-      try{localStorage.setItem("re_contact_"+form.id, JSON.stringify({phone:form.phone||"",line:form.line||""}));}catch(_){}
+      try{localStorage.setItem("re_contact_"+form.id,JSON.stringify({phone:form.phone||"",line:form.line||""}));}catch(_){}
     }
     const sharedForm = {...form, phone:"", line:"", timeline: tl};
     const finalForm = {...form, timeline: tl};

@@ -79,6 +79,11 @@ export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [currentUser, setCurrentUser] = useState(null);
   const [loginName, setLoginName] = useState("");
+  const [loginPass, setLoginPass] = useState("");
+  const [loginInvite, setLoginInvite] = useState("");
+  const [loginMode, setLoginMode] = useState("login"); // login | register
+  const [loginError, setLoginError] = useState("");
+  const [accounts, setAccounts] = useState({});
   const [properties, setProperties] = useState([]);
   const [buyers, setBuyers] = useState([]); // shared buyers (no phone)
   const [myClients, setMyClients] = useState([]); // private clients (with phone)

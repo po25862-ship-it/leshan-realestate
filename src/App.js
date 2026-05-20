@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { db } from "./firebase";
 import { ref, onValue, set, off } from "firebase/database";
 
-// shared=true: visible to all users of this artifact
 const fbSave = (key, val) => { try { set(ref(db, key), val); } catch(_){} };
 const fbListen = (key, cb) => {
   const r = ref(db, key);
